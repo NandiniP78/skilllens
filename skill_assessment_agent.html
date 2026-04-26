@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkillLens – AI Skill Assessment Agent (LM Studio)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0eff8;
+    --muted: #8884a8;
+    --accent: #a78bfa;
+    --accent2: #34d399;
+    --accent3: #f59e0b;
+    --danger: #f87171;
+    --card-bg: rgba(255,255,255,0.03);
+    --pill-bg: rgba(167,139,250,0.12);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .glow-orb {
+    position: fixed;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(167,139,250,0.06) 0%, transparent 70%);
+    top: -200px; right: -100px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .glow-orb2 {
+    position: fixed;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(52,211,153,0.04) 0%, transparent 70%);
+    bottom: -100px; left: -100px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* HEADER */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 28px 0 32px;
+    border-bottom: 0.5px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, #a78bfa, #34d399);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .logo-text {
+    font-size: 20px; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(90deg, #a78bfa, #34d399);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .badge {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    background: var(--pill-bg); color: var(--accent);
+    padding: 4px 12px; border-radius: 20px;
+    border: 0.5px solid rgba(167,139,250,0.2);
+    text-transform: uppercase;
+  }
+
+  /* STEPS */
+  .steps {
+    display: flex; gap: 8px; margin-bottom: 36px;
+  }
+  .step {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600;
+    color: var(--muted); letter-spacing: 0.02em;
+    padding: 8px 16px; border-radius: 20px;
+    border: 0.5px solid transparent;
+    transition: all 0.3s;
+  }
+  .step.active {
+    color: var(--text); background: var(--bg3);
+    border-color: var(--border2);
+  }
+  .step.done { color: var(--accent2); }
+  .step-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    background: var(--border); color: var(--muted);
+    flex-shrink: 0;
+  }
+  .step.active .step-num { background: var(--accent); color: #fff; }
+  .step.done .step-num { background: var(--accent2); color: #fff; }
+
+  /* PANELS */
+  .panel {
+    background: var(--card-bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    display: none;
+    animation: fadeIn 0.4s ease;
+  }
+  .panel.active { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .panel-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 26px; font-weight: 400;
+    letter-spacing: -0.5px; margin-bottom: 6px;
+    color: var(--text);
+  }
+  .panel-sub { font-size: 14px; color: var(--muted); margin-bottom: 24px; line-height: 1.6; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+  textarea {
+    width: 100%; min-height: 160px;
+    background: var(--bg2); border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    padding: 14px 16px; resize: vertical; line-height: 1.7;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); opacity: 0.5; }
+
+  input[type="text"] {
+    width: 100%; background: var(--bg2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: 'Syne', sans-serif; font-size: 14px;
+    padding: 12px 16px; outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 24px; border-radius: var(--radius-sm);
+    font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s; border: none;
+    letter-spacing: 0.02em;
+  }
+  .btn-primary {
+    background: var(--accent); color: #fff;
+  }
+  .btn-primary:hover { background: #9169f7; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-ghost {
+    background: transparent; color: var(--muted);
+    border: 0.5px solid var(--border2);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--border2); background: var(--bg3); }
+  .btn-green {
+    background: var(--accent2); color: #0a0a0f;
+  }
+  .btn-green:hover { background: #2bc484; transform: translateY(-1px); }
+
+  .btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+
+  /* SKILLS GRID */
+  .skills-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+  .skill-chip {
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 600;
+    background: var(--pill-bg); color: var(--accent);
+    border: 0.5px solid rgba(167,139,250,0.25);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .skill-chip.selected {
+    background: var(--accent); color: #fff;
+    border-color: var(--accent);
+  }
+  .skill-chip:hover { transform: scale(1.03); }
+
+  /* ASSESSMENT LAYOUT */
+  .assessment-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* SKILL SIDEBAR */
+  .skill-sidebar {
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    position: sticky;
+    top: 20px;
+  }
+  .sidebar-title {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 14px;
+  }
+  .skill-sidebar-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    margin-bottom: 4px; transition: all 0.25s;
+    border: 0.5px solid transparent;
+  }
+  .skill-sidebar-item.active {
+    color: var(--text);
+    background: var(--bg3);
+    border-color: var(--border2);
+  }
+  .skill-sidebar-item.scored {
+    color: var(--accent2);
+  }
+  .skill-sidebar-item.scored .ssi-dot { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+  .skill-sidebar-item.active .ssi-dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 2s infinite; }
+  .ssi-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    background: var(--border2);
+    transition: all 0.3s;
+  }
+  .ssi-score {
+    margin-left: auto; font-size: 11px; font-weight: 700;
+    color: var(--accent2); opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .skill-sidebar-item.scored .ssi-score { opacity: 1; }
+
+  /* OVERALL PROGRESS BAR */
+  .overall-progress {
+    margin-top: 16px; padding-top: 14px;
+    border-top: 0.5px solid var(--border);
+  }
+  .overall-progress-label {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--muted); font-weight: 600;
+    margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .overall-progress-track {
+    height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .overall-progress-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px; transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    width: 0%;
+  }
+
+  /* CHAT */
+  .chat-container {
+    display: flex; flex-direction: column;
+    background: var(--bg2); border-radius: var(--radius);
+    border: 0.5px solid var(--border); overflow: hidden;
+  }
+
+  /* QUESTION HEADER */
+  .question-header {
+    padding: 14px 20px;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--bg3);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .ai-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 6px var(--accent2);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+  .chat-label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .skill-progress { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+  /* Q COUNTER BADGE */
+  .q-badge {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .q-pip {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border2); transition: all 0.3s;
+  }
+  .q-pip.answered { background: var(--accent2); }
+  .q-pip.current { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+
+  /* CURRENT SKILL BANNER */
+  .skill-banner {
+    padding: 10px 20px;
+    border-bottom: 0.5px solid var(--border);
+    background: rgba(167,139,250,0.05);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .skill-banner-label {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .skill-banner-name {
+    font-size: 13px; font-weight: 700; color: var(--accent);
+    background: var(--pill-bg); padding: 3px 10px;
+    border-radius: 20px; border: 0.5px solid rgba(167,139,250,0.25);
+  }
+  .skill-banner-qcount {
+    font-size: 12px; color: var(--muted); margin-left: auto;
+  }
+
+  .chat-messages {
+    height: 340px; overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 16px;
+    scroll-behavior: smooth;
+  }
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .msg { display: flex; gap: 10px; max-width: 85%; }
+  .msg.user { flex-direction: row-reverse; align-self: flex-end; }
+  .msg-avatar {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+  .msg.ai .msg-avatar { background: var(--pill-bg); color: var(--accent); border: 0.5px solid rgba(167,139,250,0.3); }
+  .msg.user .msg-avatar { background: rgba(52,211,153,0.15); color: var(--accent2); border: 0.5px solid rgba(52,211,153,0.3); }
+  .msg-bubble {
+    padding: 12px 16px; border-radius: var(--radius-sm);
+    font-size: 14px; line-height: 1.6;
+  }
+  .msg.ai .msg-bubble { background: var(--bg3); color: var(--text); border-radius: 4px 12px 12px 12px; }
+  .msg.user .msg-bubble { background: rgba(167,139,250,0.12); color: var(--text); border-radius: 12px 4px 12px 12px; border: 0.5px solid rgba(167,139,250,0.2); }
+
+  /* SKILL TRANSITION CARD */
+  .skill-transition {
+    background: var(--bg3); border: 0.5px solid rgba(52,211,153,0.25);
+    border-radius: var(--radius-sm); padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--accent2);
+    align-self: center; max-width: 85%;
+    animation: fadeIn 0.4s ease;
+  }
+  .skill-transition-icon { font-size: 16px; }
+
+  .typing-indicator {
+    display: flex; gap: 4px; padding: 12px 16px;
+    background: var(--bg3); border-radius: 4px 12px 12px 12px;
+  }
+  .typing-dot { width: 6px; height: 6px; background: var(--muted); border-radius: 50%; animation: typing 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing { 0%,60%,100%{transform:translateY(0);} 30%{transform:translateY(-6px);} }
+
+  .chat-input-row {
+    display: flex; gap: 0;
+    border-top: 0.5px solid var(--border);
+  }
+  .chat-input {
+    flex: 1; background: var(--bg3); border: none;
+    color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px;
+    padding: 14px 18px; outline: none; resize: none;
+    height: 52px;
+  }
+  .chat-input::placeholder { color: var(--muted); opacity: 0.5; }
+  .send-btn {
+    width: 52px; background: var(--accent);
+    border: none; cursor: pointer; color: #fff;
+    font-size: 18px; transition: background 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .send-btn:hover { background: #9169f7; }
+  .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* RESULTS AUTO-TRANSITION BANNER */
+  .results-transition-banner {
+    display: none;
+    background: rgba(52,211,153,0.08);
+    border: 0.5px solid rgba(52,211,153,0.25);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    margin-top: 16px;
+    text-align: center;
+    font-size: 14px; color: var(--accent2);
+    animation: fadeIn 0.4s ease;
+  }
+  .results-transition-banner strong { font-weight: 700; }
+  .results-countdown {
+    display: inline-block;
+    background: var(--accent2); color: #0a0a0f;
+    font-weight: 800; font-size: 13px;
+    width: 22px; height: 22px; border-radius: 50%;
+    line-height: 22px; text-align: center;
+    margin-left: 6px; vertical-align: middle;
+    transition: all 0.3s;
+  }
+
+  @media (max-width: 680px) {
+    .assessment-layout { grid-template-columns: 1fr; }
+    .skill-sidebar { position: static; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .skill-sidebar-item { margin-bottom: 0; padding: 5px 10px; font-size: 12px; }
+    .overall-progress { display: none; }
+    .sidebar-title { width: 100%; }
+  }
+
+  /* RESULTS */
+  .score-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+  .score-card {
+    background: var(--bg3); border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm); padding: 16px; text-align: center;
+  }
+  .score-num { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+  .score-lbl { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+  .skill-bars { display: flex; flex-direction: column; gap: 14px; margin-bottom: 28px; }
+  .skill-bar-row { display: flex; flex-direction: column; gap: 6px; }
+  .skill-bar-header { display: flex; justify-content: space-between; align-items: center; }
+  .skill-name { font-size: 14px; font-weight: 600; }
+  .skill-score-badge {
+    font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 20px;
+  }
+  .skill-bar-track {
+    height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+  .skill-bar-fill { height: 100%; border-radius: 3px; transition: width 1s cubic-bezier(0.4,0,0.2,1); }
+
+  .gap-section { margin-bottom: 28px; }
+  .gap-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px; margin-bottom: 14px;
+  }
+  .gap-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .gap-chip {
+    padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
+  }
+  .gap-critical { background: rgba(248,113,113,0.1); color: var(--danger); border: 0.5px solid rgba(248,113,113,0.25); }
+  .gap-moderate { background: rgba(245,158,11,0.1); color: var(--accent3); border: 0.5px solid rgba(245,158,11,0.25); }
+
+  .learning-plan { display: flex; flex-direction: column; gap: 16px; }
+  .lp-item {
+    background: var(--bg3); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+    display: flex; gap: 16px; align-items: flex-start;
+  }
+  .lp-rank {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--pill-bg); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; flex-shrink: 0;
+  }
+  .lp-content { flex: 1; }
+  .lp-skill-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .lp-desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 10px; }
+  .lp-resources { display: flex; flex-direction: column; gap: 4px; }
+  .lp-resource {
+    font-size: 12px; color: var(--accent);
+    display: flex; align-items: center; gap: 6px;
+    text-decoration: none;
+  }
+  .lp-resource::before { content: '→'; font-size: 10px; }
+  .lp-meta { display: flex; gap: 8px; margin-top: 10px; }
+  .lp-tag {
+    font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .lp-time { background: rgba(52,211,153,0.1); color: var(--accent2); border: 0.5px solid rgba(52,211,153,0.2); }
+  .lp-priority-high { background: rgba(248,113,113,0.1); color: var(--danger); border: 0.5px solid rgba(248,113,113,0.2); }
+  .lp-priority-med { background: rgba(245,158,11,0.1); color: var(--accent3); border: 0.5px solid rgba(245,158,11,0.2); }
+
+  .section-divider { height: 0.5px; background: var(--border); margin: 28px 0; }
+
+  .export-row {
+    display: flex; gap: 12px; margin-top: 28px; justify-content: flex-end;
+  }
+
+  .error-msg { font-size: 13px; color: var(--danger); margin-top: 8px; }
+  .loading-text { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .disclaimer {
+    margin-top: 12px; padding: 12px 16px;
+    background: rgba(167,139,250,0.06); border-radius: var(--radius-sm);
+    border: 0.5px solid rgba(167,139,250,0.15);
+    font-size: 12px; color: var(--muted); line-height: 1.6;
+  }
+
+  @media (max-width: 600px) {
+    .two-col { grid-template-columns: 1fr; }
+    .score-cards { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* LM Studio config bar */
+  .lm-config-bar {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(52,211,153,0.05);
+    border: 0.5px solid rgba(52,211,153,0.2);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .lm-config-bar label {
+    text-transform: none; letter-spacing: 0;
+    font-size: 13px; color: var(--accent2);
+    margin: 0; white-space: nowrap;
+    font-weight: 700;
+  }
+  .lm-config-bar input {
+    flex: 1; min-width: 180px;
+    background: var(--bg2); border: 0.5px solid rgba(52,211,153,0.3);
+    border-radius: 6px; color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    padding: 8px 12px; outline: none;
+  }
+  .lm-config-bar input:focus { border-color: var(--accent2); }
+  .lm-status {
+    font-size: 12px; font-weight: 600; padding: 4px 12px;
+    border-radius: 20px; white-space: nowrap;
+  }
+  .lm-status.online { background: rgba(52,211,153,0.1); color: var(--accent2); border: 0.5px solid rgba(52,211,153,0.25); }
+  .lm-status.offline { background: rgba(248,113,113,0.1); color: var(--danger); border: 0.5px solid rgba(248,113,113,0.25); }
+  .lm-status.checking { background: rgba(245,158,11,0.1); color: var(--accent3); border: 0.5px solid rgba(245,158,11,0.25); }
+  .btn-sm {
+    padding: 7px 14px; font-size: 13px;
+    background: rgba(52,211,153,0.12); color: var(--accent2);
+    border: 0.5px solid rgba(52,211,153,0.3);
+    border-radius: 6px; cursor: pointer; font-family: 'Syne', sans-serif;
+    font-weight: 700; transition: all 0.2s; white-space: nowrap;
+  }
+  .btn-sm:hover { background: rgba(52,211,153,0.2); }
+
+  .setup-guide {
+    background: var(--bg3); border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 18px;
+    margin-bottom: 20px; font-size: 13px; line-height: 1.8;
+  }
+  .setup-guide summary {
+    cursor: pointer; color: var(--accent2); font-weight: 700;
+    font-size: 13px; user-select: none;
+  }
+  .setup-guide ol { margin: 10px 0 0 16px; color: var(--muted); }
+  .setup-guide code {
+    font-family: 'DM Mono', monospace; font-size: 12px;
+    background: var(--bg2); padding: 1px 6px; border-radius: 4px;
+    color: var(--accent);
+  }
+  .model-row {
+    display: flex; align-items: center; gap: 10px; margin-top: 8px;
+  }
+  .model-row label { margin: 0; }
+</style>
+</head>
+<body>
+<div class="glow-orb"></div>
+<div class="glow-orb2"></div>
+
+<div class="app">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⬡</div>
+      <span class="logo-text">SkillLens</span>
+    </div>
+    <span class="badge">LM Studio · Local AI</span>
+  </header>
+
+  <!-- STEP INDICATOR -->
+  <div class="steps" id="stepsEl">
+    <div class="step active" id="s1"><span class="step-num">1</span> Context</div>
+    <div class="step" id="s2"><span class="step-num">2</span> Skills</div>
+    <div class="step" id="s3"><span class="step-num">3</span> Assessment</div>
+    <div class="step" id="s4"><span class="step-num">4</span> Results</div>
+  </div>
+
+  <!-- LM STUDIO CONFIG BAR -->
+  <details class="setup-guide" id="setupGuide">
+    <summary>⚙️ LM Studio Setup Guide (click to expand)</summary>
+    <ol>
+      <li>Download &amp; open <strong>LM Studio</strong> from <code>lmstudio.ai</code></li>
+      <li>Download any chat model (e.g. <code>mistral-7b-instruct</code>, <code>llama-3-8b</code>, <code>phi-3-mini</code>)</li>
+      <li>Go to <strong>Local Server</strong> tab → click <strong>Start Server</strong> (default port: <code>1234</code>)</li>
+      <li>Enable <strong>CORS</strong> in LM Studio server settings</li>
+      <li>Enter your server URL &amp; model name below, then click <strong>Test Connection</strong></li>
+    </ol>
+  </details>
+
+  <div class="lm-config-bar">
+    <label>🟢 LM Studio</label>
+    <input type="text" id="lmUrl" value="http://localhost:1234" placeholder="http://localhost:1234" style="max-width:220px" />
+    <div class="model-row">
+      <label style="color:var(--muted)">Model:</label>
+      <input type="text" id="lmModel" value="qwen2.5-coder-1.5b-instruct" placeholder="qwen2.5-coder-1.5b-instruct" style="max-width:220px" />
+    </div>
+    <button class="btn-sm" onclick="testConnection()">Reconnect</button>
+    <span class="lm-status checking" id="lmStatus">Connecting…</span>
+  </div>
+
+  <!-- PANEL 1: CONTEXT -->
+  <div class="panel active" id="panel1">
+    <div class="panel-title">Set the stage</div>
+    <div class="panel-sub">Paste the Job Description and candidate's Resume to begin the skill analysis.</div>
+    <div class="two-col">
+      <div>
+        <label>Job Description</label>
+        <textarea id="jdInput" placeholder="Paste job description here...
+
+Example:
+Senior Full-Stack Engineer at Acme Corp.
+Requirements: React, Node.js, PostgreSQL, Docker, REST API design, Agile..."></textarea>
+      </div>
+      <div>
+        <label>Candidate Resume</label>
+        <textarea id="resumeInput" placeholder="Paste resume / candidate background here...
+
+Example:
+Jane Doe – 3 years experience
+Skills: JavaScript, React basics, Python, SQL...
+Projects: Built e-commerce frontend with Vue.js..."></textarea>
+      </div>
+    </div>
+    <div id="ctxError" class="error-msg" style="display:none"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="analyzeContext()" id="analyzeBtn">Analyse → Extract Skills</button>
+    </div>
+  </div>
+
+  <!-- PANEL 2: SKILLS -->
+  <div class="panel" id="panel2">
+    <div class="panel-title">Required Skills Detected</div>
+    <div class="panel-sub">Review and select which skills to assess. Deselect any that are not relevant to this evaluation.</div>
+    <div id="skillsLoading" class="loading-text"><span class="spin">⟳</span> Extracting skills from JD & resume...</div>
+    <div id="skillsContent" style="display:none">
+      <label>Skills to assess (click to toggle)</label>
+      <div class="skills-grid" id="skillsGrid"></div>
+      <div class="disclaimer">🔒 <strong>100% Local & Private.</strong> The agent will conversationally probe each selected skill to gauge real proficiency. All processing runs on your machine via LM Studio — no data leaves your device.</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="goStep(1)">← Back</button>
+      <button class="btn btn-primary" onclick="startAssessment()" id="startAssessBtn" disabled>Start Assessment →</button>
+    </div>
+  </div>
+
+  <!-- PANEL 3: ASSESSMENT CHAT -->
+  <div class="panel" id="panel3">
+    <div class="panel-title">Live Skill Assessment</div>
+    <div class="panel-sub">Answer each question naturally. The AI probes depth — not just keywords. Up to 2 questions per skill, then scores automatically.</div>
+
+    <div class="assessment-layout">
+      <!-- LEFT: Skill sidebar -->
+      <div class="skill-sidebar">
+        <div class="sidebar-title">Skills Queue</div>
+        <div id="skillSidebarItems"></div>
+        <div class="overall-progress">
+          <div class="overall-progress-label">
+            <span>Progress</span>
+            <span id="overallProgressPct">0%</span>
+          </div>
+          <div class="overall-progress-track">
+            <div class="overall-progress-fill" id="overallProgressFill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Chat panel -->
+      <div class="chat-container">
+        <!-- Header with skill context -->
+        <div class="question-header">
+          <div class="ai-dot"></div>
+          <span class="chat-label">SkillLens Interviewer</span>
+          <div class="q-badge" id="qBadge"></div>
+        </div>
+
+        <!-- Current skill banner -->
+        <div class="skill-banner" id="skillBanner">
+          <span class="skill-banner-label">Now assessing</span>
+          <span class="skill-banner-name" id="bannerSkillName">—</span>
+          <span class="skill-banner-qcount" id="bannerQCount"></span>
+        </div>
+
+        <div class="chat-messages" id="chatMessages"></div>
+
+        <div class="chat-input-row">
+          <textarea class="chat-input" id="chatInput" placeholder="Type your answer and press Enter..." rows="1" onkeydown="handleChatKey(event)"></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">↑</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-results transition banner -->
+    <div class="results-transition-banner" id="resultsTransitionBanner">
+      <strong>✅ All skills assessed!</strong> Generating your report in <span class="results-countdown" id="resultsCountdown">3</span>
+    </div>
+
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-ghost" onclick="goStep(2)">← Back</button>
+      <button class="btn btn-green" onclick="generateResults()" id="generateResultsBtn" style="display:none">Generate Report →</button>
+    </div>
+  </div>
+
+  <!-- PANEL 4: RESULTS -->
+  <div class="panel" id="panel4">
+    <div class="panel-title">Assessment Report</div>
+    <div class="panel-sub">Skill proficiency scores, identified gaps, and a personalised learning plan.</div>
+    <div id="resultsLoading" class="loading-text"><span class="spin">⟳</span> Generating personalised report...</div>
+    <div id="resultsContent" style="display:none">
+      <div class="score-cards" id="scoreCards"></div>
+      <div class="section-divider"></div>
+      <div class="skill-bars" id="skillBars"></div>
+      <div class="section-divider"></div>
+      <div class="gap-section" id="gapSection"></div>
+      <div class="section-divider"></div>
+      <div id="learningPlanSection">
+        <div class="gap-title">Personalised Learning Plan</div>
+        <div class="learning-plan" id="learningPlan"></div>
+      </div>
+    </div>
+    <div class="export-row">
+      <button class="btn btn-ghost" onclick="goStep(1)">Start Over</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- LM STUDIO CONFIG ----
+// LM Studio exposes an OpenAI-compatible API at http://localhost:1234/v1
+// No API key needed for local usage.
+
+function getLmUrl() {
+  return (document.getElementById('lmUrl').value || 'http://localhost:1234').replace(/\/$/, '');
+}
+function getLmModel() {
+  return document.getElementById('lmModel').value.trim() || 'local-model';
+}
+
+async function testConnection() {
+  const statusEl = document.getElementById('lmStatus');
+  statusEl.textContent = 'Testing…';
+  statusEl.className = 'lm-status checking';
+  try {
+    const url = getLmUrl() + '/v1/models';
+    const resp = await fetch(url, { method: 'GET' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    const models = (data.data || []).map(m => m.id).join(', ') || 'connected';
+    // Auto-fill model if only one loaded
+    if (data.data && data.data.length === 1) {
+      document.getElementById('lmModel').value = data.data[0].id;
+    }
+    statusEl.textContent = '✓ Online – ' + (data.data?.length || '?') + ' model(s)';
+    statusEl.className = 'lm-status online';
+    // Hide setup guide on success
+    document.getElementById('setupGuide').removeAttribute('open');
+  } catch(e) {
+    statusEl.textContent = '✗ Offline – check LM Studio';
+    statusEl.className = 'lm-status offline';
+    document.getElementById('setupGuide').setAttribute('open', '');
+  }
+}
+
+// ---- MAIN API CALL (OpenAI-compatible) ----
+async function callLM(messages, systemPrompt, maxTokens = 1500) {
+  const baseUrl = getLmUrl();
+  const model = getLmModel();
+  const endpoint = baseUrl + '/v1/chat/completions';
+
+  const payload = {
+    model,
+    max_tokens: maxTokens,
+    temperature: 0.4,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...messages
+    ]
+  };
+
+  const resp = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`LM Studio error ${resp.status}: ${err.slice(0,200)}`);
+  }
+  const data = await resp.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('Empty response from LM Studio');
+  return text;
+}
+
+// Alias used throughout the app
+const callClaude = callLM;
+
+// Auto-connect on page load using the default model
+window.addEventListener('DOMContentLoaded', () => testConnection());
+
+// Robust JSON extractor — handles Qwen 0.5B's occasional preamble/suffix text
+function extractJSON(raw) {
+  // Strip markdown fences
+  let s = raw.replace(/```json|```/gi, '').trim();
+  // Find first { and last } to isolate the JSON object
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('No JSON object found in response: ' + s.slice(0, 120));
+  const jsonStr = s.slice(start, end + 1);
+  try {
+    return JSON.parse(jsonStr);
+  } catch(e) {
+    // Last resort: try to fix common small-model mistakes
+    const fixed = jsonStr
+      .replace(/,\s*}/g, '}')      // trailing commas in objects
+      .replace(/,\s*]/g, ']')      // trailing commas in arrays
+      .replace(/([A-Za-z_][A-Za-z0-9_]*)(?=\s*:)/g, '"$1"'); // unquoted keys
+    return JSON.parse(fixed);
+  }
+}
+let state = {
+  jd: '', resume: '', skills: [], selectedSkills: [],
+  conversation: [], currentSkillIdx: 0, skillScores: {},
+  assessmentComplete: false, questionsPerSkill: {}
+};
+
+function goStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById('panel'+i).classList.toggle('active', i===n);
+    const s = document.getElementById('s'+i);
+    s.classList.remove('active','done');
+    if (i < n) s.classList.add('done');
+    else if (i === n) s.classList.add('active');
+  }
+  for (let i = 1; i <= 4; i++) {
+    const s = document.getElementById('s'+i);
+    const num = s.querySelector('.step-num');
+    num.textContent = i < n ? '✓' : i;
+  }
+}
+
+async function analyzeContext() {
+  const jd = document.getElementById('jdInput').value.trim();
+  const resume = document.getElementById('resumeInput').value.trim();
+  const errEl = document.getElementById('ctxError');
+  if (!jd || !resume) {
+    errEl.textContent = 'Please paste both the job description and resume.';
+    errEl.style.display = 'block'; return;
+  }
+  errEl.style.display = 'none';
+  state.jd = jd; state.resume = resume;
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true; btn.textContent = 'Analysing...';
+
+  goStep(2);
+  document.getElementById('skillsLoading').style.display = 'flex';
+  document.getElementById('skillsContent').style.display = 'none';
+
+  try {
+    const result = await callClaude([{
+      role: 'user',
+      content: `JD:\n${jd.slice(0,600)}\n\nResume:\n${resume.slice(0,600)}`
+    }],
+    `You are a JSON API. Extract skills from the job description and resume.
+RULES: Reply with ONLY the JSON below. No explanation. No markdown. No extra text. Start your reply with { and end with }.
+
+{
+  "required_skills": ["React","Node.js","Docker"],
+  "candidate_has": ["React"],
+  "candidate_gaps": ["Node.js","Docker"]
+}
+
+Pick max 6 real technical skills from the JD. Short names only (1-3 words each).`,
+    400);
+
+    const parsed = extractJSON(result);
+    state.skills = parsed.required_skills || [];
+    state.selectedSkills = [...state.skills];
+
+    renderSkillChips();
+    document.getElementById('skillsLoading').style.display = 'none';
+    document.getElementById('skillsContent').style.display = 'block';
+    document.getElementById('startAssessBtn').disabled = false;
+  } catch(e) {
+    document.getElementById('skillsLoading').textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = 'Analyse → Extract Skills';
+}
+
+function renderSkillChips() {
+  const grid = document.getElementById('skillsGrid');
+  grid.innerHTML = state.skills.map(s =>
+    `<span class="skill-chip selected" onclick="toggleSkill(this,'${s.replace(/'/g,"\\'")}')">
+      ${s}
+    </span>`
+  ).join('');
+}
+
+function toggleSkill(el, skill) {
+  el.classList.toggle('selected');
+  if (el.classList.contains('selected')) {
+    if (!state.selectedSkills.includes(skill)) state.selectedSkills.push(skill);
+  } else {
+    state.selectedSkills = state.selectedSkills.filter(s => s !== skill);
+  }
+}
+
+// ---- STEP 3: ASSESSMENT ----
+async function startAssessment() {
+  const chips = document.querySelectorAll('.skill-chip.selected');
+  state.selectedSkills = Array.from(chips).map(c => c.textContent.trim());
+  if (!state.selectedSkills.length) return;
+
+  state.conversation = [];
+  state.currentSkillIdx = 0;
+  state.skillScores = {};
+  state.questionsPerSkill = {};
+  state.selectedSkills.forEach(s => { state.questionsPerSkill[s] = 0; });
+
+  goStep(3);
+  buildSkillSidebar();
+  updateSkillProgress();
+  document.getElementById('chatMessages').innerHTML = '';
+  document.getElementById('generateResultsBtn').style.display = 'none';
+  document.getElementById('resultsTransitionBanner').style.display = 'none';
+
+  await askNextSkillQuestion();
+}
+
+function buildSkillSidebar() {
+  const container = document.getElementById('skillSidebarItems');
+  container.innerHTML = state.selectedSkills.map((s, i) => `
+    <div class="skill-sidebar-item" id="ssi-${i}">
+      <span class="ssi-dot"></span>
+      <span class="ssi-name">${s}</span>
+      <span class="ssi-score" id="ssi-score-${i}"></span>
+    </div>
+  `).join('');
+}
+
+function updateSkillProgress() {
+  const total = state.selectedSkills.length;
+  const scored = Object.keys(state.skillScores).length;
+
+  // Update overall progress bar
+  const pct = total > 0 ? Math.round((scored / total) * 100) : 0;
+  const fillEl = document.getElementById('overallProgressFill');
+  const pctEl = document.getElementById('overallProgressPct');
+  if (fillEl) fillEl.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = pct + '%';
+
+  // Update sidebar items
+  state.selectedSkills.forEach((skill, i) => {
+    const item = document.getElementById('ssi-' + i);
+    const scoreEl = document.getElementById('ssi-score-' + i);
+    if (!item) return;
+    item.classList.remove('active', 'scored');
+    if (state.skillScores[skill]) {
+      item.classList.add('scored');
+      if (scoreEl) scoreEl.textContent = state.skillScores[skill].score + '/10';
+    } else if (i === state.currentSkillIdx) {
+      item.classList.add('active');
+    }
+  });
+
+  // Update skill banner
+  const currentSkill = state.selectedSkills[state.currentSkillIdx];
+  const bannerName = document.getElementById('bannerSkillName');
+  const bannerQCount = document.getElementById('bannerQCount');
+  if (bannerName && currentSkill) {
+    bannerName.textContent = currentSkill;
+  }
+  if (bannerQCount && currentSkill) {
+    const q = state.questionsPerSkill[currentSkill] || 0;
+    bannerQCount.textContent = `Q${q + 1} of 2`;
+  }
+
+  // Update Q pip indicators
+  const qBadge = document.getElementById('qBadge');
+  if (qBadge && currentSkill) {
+    const q = state.questionsPerSkill[currentSkill] || 0;
+    qBadge.innerHTML = [0,1].map(i =>
+      `<div class="q-pip ${i < q ? 'answered' : i === q ? 'current' : ''}"></div>`
+    ).join('');
+  }
+}
+
+function addTransitionCard(text) {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'skill-transition';
+  div.innerHTML = `<span class="skill-transition-icon">→</span> <span>${text}</span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function addMessage(role, text) {
+  const container = document.getElementById('chatMessages');
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+  const avatar = role === 'ai' ? 'AI' : 'You';
+  msg.innerHTML = `
+    <div class="msg-avatar">${avatar}</div>
+    <div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>
+  `;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showTyping() {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'msg ai'; div.id = 'typing';
+  div.innerHTML = `<div class="msg-avatar">AI</div>
+    <div class="typing-indicator">
+      <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+    </div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+function hideTyping() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+async function askNextSkillQuestion() {
+  const skills = state.selectedSkills;
+  if (state.currentSkillIdx >= skills.length) {
+    // All skills done — show completion UI
+    document.getElementById('chatInput').disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+    state.assessmentComplete = true;
+
+    // Show skill transition card in chat
+    addTransitionCard(`✅ All ${skills.length} skills assessed! Preparing your report…`);
+
+    // Update sidebar — all done
+    state.selectedSkills.forEach((_, i) => {
+      const item = document.getElementById('ssi-' + i);
+      if (item) { item.classList.remove('active'); item.classList.add('scored'); }
+    });
+    const fillEl = document.getElementById('overallProgressFill');
+    if (fillEl) fillEl.style.width = '100%';
+    const pctEl = document.getElementById('overallProgressPct');
+    if (pctEl) pctEl.textContent = '100%';
+
+    // Show banner + countdown
+    const banner = document.getElementById('resultsTransitionBanner');
+    banner.style.display = 'block';
+    const countdownEl = document.getElementById('resultsCountdown');
+    let count = 3;
+    countdownEl.textContent = count;
+    const timer = setInterval(() => {
+      count--;
+      countdownEl.textContent = count;
+      if (count <= 0) { clearInterval(timer); generateResults(); }
+    }, 1000);
+
+    // Also show manual button as fallback
+    document.getElementById('generateResultsBtn').style.display = 'inline-flex';
+    return;
+  }
+
+  const skill = skills[state.currentSkillIdx];
+  const qCount = state.questionsPerSkill[skill] || 0;
+
+  // Show skill transition card when moving to a new skill (not the first question)
+  if (qCount === 0 && state.currentSkillIdx > 0) {
+    addTransitionCard(`Moving to next skill: ${skill}`);
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  updateSkillProgress();
+
+  showTyping();
+  try {
+    const sysPrompt = `You are a technical interviewer. Assess the candidate's real skill in: "${skill}".
+
+Ask ONE short, specific question (1-2 sentences). Be direct, not robotic.
+If the answer is good → end your reply with exactly: SCORE:[0-10] | RATIONALE:[one sentence]
+If the answer is vague → ask one follow-up. After 2 answers always give a SCORE.
+Max 2 questions per skill. Keep replies under 60 words.`;
+
+    // Keep conversation short for 4GB RAM — only last 6 messages
+    const recentConv = state.conversation.slice(-6);
+    const messages = [
+      ...recentConv,
+      ...(qCount === 0 ? [{role:'user', content:`Assess my skill in: ${skill}`}] : [])
+    ];
+
+    const reply = await callClaude(messages.length ? messages : [{role:'user',content:`Assess my skill in: ${skill}`}], sysPrompt, 200);
+
+    hideTyping();
+
+    // Parse score if present
+    const scoreMatch = reply.match(/SCORE:(\d+(?:\.\d+)?)/);
+    const rationaleMatch = reply.match(/RATIONALE:(.+?)(?:\n|$)/);
+    const cleanReply = reply.replace(/SCORE:\d+(?:\.\d+)?\s*\|?\s*RATIONALE:[^\n]*/g,'').trim();
+
+    if (scoreMatch) {
+      const score = parseFloat(scoreMatch[1]);
+      const rationale = rationaleMatch ? rationaleMatch[1].trim() : '';
+      state.skillScores[skill] = { score, rationale };
+      state.currentSkillIdx++;
+      updateSkillProgress();
+      addMessage('ai', cleanReply || `Got it on ${skill}! Moving on.`);
+      state.conversation.push({role:'assistant', content: reply});
+      // Auto-continue to next skill
+      setTimeout(askNextSkillQuestion, 1200);
+    } else {
+      addMessage('ai', cleanReply);
+      state.conversation.push({role:'assistant', content: reply});
+      state.questionsPerSkill[skill] = (state.questionsPerSkill[skill]||0) + 1;
+      updateSkillProgress();
+    }
+  } catch(e) {
+    hideTyping();
+    addMessage('ai', '⚠️ Could not reach LM Studio. Make sure it\'s running on ' + getLmUrl() + ' with a model loaded. Error: ' + (e?.message||'unknown'));
+  }
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || state.assessmentComplete) return;
+  input.value = '';
+  addMessage('user', text);
+  state.conversation.push({role:'user', content: text});
+
+  const skill = state.selectedSkills[state.currentSkillIdx];
+  const qCount = state.questionsPerSkill[skill] || 0;
+
+  // Force score after 2 answers
+  if (qCount >= 1) {
+    // Ask AI to score now
+    showTyping();
+    try {
+      const sysPrompt = `You are scoring a candidate on skill: "${skill}". Give 1 sentence feedback then end with exactly: SCORE:[0-10] | RATIONALE:[one sentence]. Keep reply under 40 words.`;
+      const reply = await callClaude(state.conversation.slice(-4), sysPrompt, 150);
+      hideTyping();
+      const scoreMatch = reply.match(/SCORE:(\d+(?:\.\d+)?)/);
+      const rationaleMatch = reply.match(/RATIONALE:(.+?)(?:\n|$)/);
+      const cleanReply = reply.replace(/SCORE:\d+(?:\.\d+)?\s*\|?\s*RATIONALE:[^\n]*/g,'').trim();
+      if (scoreMatch) {
+        state.skillScores[skill] = {
+          score: parseFloat(scoreMatch[1]),
+          rationale: rationaleMatch ? rationaleMatch[1].trim() : ''
+        };
+        state.currentSkillIdx++;
+        updateSkillProgress();
+        addMessage('ai', cleanReply || `Thanks! Moving to the next skill.`);
+        state.conversation.push({role:'assistant', content: reply});
+        setTimeout(askNextSkillQuestion, 1200);
+      } else {
+        addMessage('ai', cleanReply);
+        state.conversation.push({role:'assistant', content: reply});
+      }
+    } catch(e) { hideTyping(); }
+  } else {
+    state.questionsPerSkill[skill] = (state.questionsPerSkill[skill]||0) + 1;
+    await askNextSkillQuestion();
+  }
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+// ---- STEP 4: RESULTS ----
+async function generateResults() {
+  goStep(4);
+  document.getElementById('resultsLoading').style.display = 'flex';
+  document.getElementById('resultsContent').style.display = 'none';
+
+  const scoresSummary = Object.entries(state.skillScores)
+    .map(([s,v]) => `${s}: ${v.score}/10 (${v.rationale})`).join('\n');
+
+  try {
+    const result = await callClaude([{
+      role: 'user',
+      content: `Scores:\n${scoresSummary}`
+    }],
+    `You are a JSON API. Generate a skill gap report.
+RULES: Reply with ONLY the JSON below. No explanation. No markdown. No extra text. Start with { and end with }.
+
+{
+  "overall_score": 6.5,
+  "readiness_pct": 60,
+  "skills_assessed": 4,
+  "skill_scores": [
+    {"name":"React","score":7,"level":"moderate"}
+  ],
+  "critical_gaps": ["Docker"],
+  "moderate_gaps": ["TypeScript"],
+  "learning_plan": [
+    {
+      "rank": 1,
+      "skill": "Docker",
+      "why": "Required for deployment, not on resume",
+      "resources": ["docs.docker.com/get-started", "YouTube: TechWorld with Nana Docker Tutorial"],
+      "weeks": 3,
+      "priority": "high"
+    }
+  ]
+}
+
+level must be exactly: "strong" if score>=8, "moderate" if score>=5, "weak" if score<5.
+Provide 2-3 learning plan items max. Keep all text very short.`,
+    800);
+
+    const data = extractJSON(result);
+    renderResults(data);
+    document.getElementById('resultsLoading').style.display = 'none';
+    document.getElementById('resultsContent').style.display = 'block';
+  } catch(e) {
+    document.getElementById('resultsLoading').innerHTML = '⚠️ Error generating report — is LM Studio still running? ' + e.message;
+  }
+}
+
+function renderResults(data) {
+  // Score cards
+  document.getElementById('scoreCards').innerHTML = `
+    <div class="score-card">
+      <div class="score-num" style="color:var(--accent)">${data.overall_score.toFixed(1)}</div>
+      <div class="score-lbl">Overall Score / 10</div>
+    </div>
+    <div class="score-card">
+      <div class="score-num" style="color:var(--accent2)">${data.readiness_pct}%</div>
+      <div class="score-lbl">Role Readiness</div>
+    </div>
+    <div class="score-card">
+      <div class="score-num" style="color:var(--accent3)">${data.skills_assessed}</div>
+      <div class="score-lbl">Skills Assessed</div>
+    </div>
+  `;
+
+  // Skill bars
+  const colors = { strong: 'var(--accent2)', moderate: 'var(--accent3)', weak: 'var(--danger)' };
+  const bgColors = { strong: 'rgba(52,211,153,0.15)', moderate: 'rgba(245,158,11,0.15)', weak: 'rgba(248,113,113,0.15)' };
+  const txtColors = { strong: 'var(--accent2)', moderate: 'var(--accent3)', weak: 'var(--danger)' };
+
+  document.getElementById('skillBars').innerHTML = data.skill_scores.map(s => `
+    <div class="skill-bar-row">
+      <div class="skill-bar-header">
+        <span class="skill-name">${s.name}</span>
+        <span class="skill-score-badge" style="background:${bgColors[s.level]};color:${txtColors[s.level]};border:0.5px solid ${txtColors[s.level]}33">
+          ${s.score}/10 · ${s.level}
+        </span>
+      </div>
+      <div class="skill-bar-track">
+        <div class="skill-bar-fill" style="width:${s.score*10}%;background:${colors[s.level]}"></div>
+      </div>
+    </div>
+  `).join('');
+
+  // Gaps
+  const criticalHtml = (data.critical_gaps||[]).map(g =>
+    `<span class="gap-chip gap-critical">${g}</span>`).join('');
+  const moderateHtml = (data.moderate_gaps||[]).map(g =>
+    `<span class="gap-chip gap-moderate">${g}</span>`).join('');
+  document.getElementById('gapSection').innerHTML = `
+    <div class="gap-title">Skill Gaps Identified</div>
+    ${criticalHtml || moderateHtml ? `
+      ${criticalHtml ? `<div style="margin-bottom:10px"><div style="font-size:12px;color:var(--danger);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Critical</div><div class="gap-chips">${criticalHtml}</div></div>` : ''}
+      ${moderateHtml ? `<div><div style="font-size:12px;color:var(--accent3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Moderate</div><div class="gap-chips">${moderateHtml}</div></div>` : ''}
+    ` : '<p style="color:var(--muted);font-size:14px">No significant gaps identified — strong candidate!</p>'}
+  `;
+
+  // Learning plan
+  document.getElementById('learningPlan').innerHTML = (data.learning_plan||[]).map(item => `
+    <div class="lp-item">
+      <div class="lp-rank">${item.rank}</div>
+      <div class="lp-content">
+        <div class="lp-skill-name">${item.skill}</div>
+        <div class="lp-desc">${item.why}</div>
+        <div class="lp-resources">
+          ${(item.resources||[]).map(r => `<span class="lp-resource">${r}</span>`).join('')}
+        </div>
+        <div class="lp-meta">
+          <span class="lp-tag lp-time">~${item.weeks}w</span>
+          <span class="lp-tag ${item.priority==='high'?'lp-priority-high':'lp-priority-med'}">${item.priority} priority</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>
